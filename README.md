@@ -1,23 +1,134 @@
-# Battery Report Agent
+# Subject
 
-글로벌 배터리 시장 구조 변화 속 LG에너지솔루션 vs CATL 전략 비교 보고서를 자동 생성하는 AI Agent.
+Battery Market Strategy Analysis using Multi-Agent System
 
----
+A multi-agent based system that analyzes and compares the portfolio diversification strategies of LG Energy Solution and CATL under the EV chasm, using PDF-based retrieval and real-time web search.
 
-## 전체 실행 순서 요약
+## Overview
 
+- Objective :글로벌 배터리 시장의 구조적 변화 속에서 LG에너지솔루션과 CATL의 포트폴리오 다각화 전략을 비교 분석하고, 한국 배터리 산업의 대응 방향과 시사점을 도출하는 전략 분석 보고서를 생성하는 것을 목표로 합니다.
+- Method :Supervisor 기반 Multi-Agent Workflow를 설계하고, 내부 PDF 문서 검색을 위한 RAG와 최신 시장 정보 보완을 위한 Web Search를 결합하여 산업 분석, 정책 분석, 기업 분석, Comparative SWOT, 최종 보고서 생성을 수행합니다.
+- Tools :
+  Python, LangGraph, LangChain, Qdrant, Tavily API, OpenAI API
+
+## Features
+
+- PDF 자료 기반 정보 추출
+  - 산업 보고서, 정책 보고서, ESG 보고서 등 내부 문서를 기반으로 핵심 정보 검색
+- Web Search 기반 최신 시장 데이터 반영
+  - 내부 문서에 없는 최신 시장 동향과 외부 환경 변화 보완
+- 기업별 전략 분석
+  - LG에너지솔루션과 CATL의 포트폴리오 다각화 전략 및 핵심 경쟁력 비교
+- Comparative SWOT 자동 생성
+  - 양사의 강점, 약점, 기회, 위협을 비교 관점에서 구조화
+- 보고서 자동 생성
+  - SUMMARY, 시장 배경, 기업 전략, SWOT, 종합 시사점, REFERENCE를 포함한 보고서 생성
+- 확증 편향 방지 전략 :
+  - 내부 문서와 외부 웹 자료를 함께 활용
+  - 특정 출처에 편중되지 않도록 다중 소스 기반으로 정보 수집
+  - Agent 간 Cross-validation 구조를 통해 결과 일관성과 신뢰성 점검
+  - 최신 데이터 중심의 Web Search를 적용하여 오래된 정보 반영을 최소화
+
+## Tech Stack
+
+| Category   | Details                        |
+| ---------- | ------------------------------ |
+| Framework  | LangGraph, LangChain, Python   |
+| LLM        | OpenAI API                     |
+| Retrieval  | Qdrant                         |
+| Embedding  | Qwen/Qwen3-Embedding-0.6B      |
+| Web Search | Tavily API                     |
+| Loader     | PyPDFLoader                    |
+| Splitter   | RecursiveCharacterTextSplitter |
+
+## RAG & Web Search Tool
+
+- RAG Retriever
+
+  - Qdrant 기반 벡터 검색 (PDF 문서)
+  - Qwen Embedding (다국어)
+  - metadata 필터: `research`, `lg`, `catl`
+- Web Search
+
+  - Tavily API 기반 최신 데이터 검색
+  - RAG에서 부족한 정보 보완
+- Strategy
+
+  - RAG → 실패 시 Web Search fallback
+
+### Component Summary
+
+| Component       | Selection                      | Reason                                                                       |
+| --------------- | ------------------------------ | ---------------------------------------------------------------------------- |
+| Document Loader | PyPDFLoader                    | 한글·중국어 PDF 텍스트 추출 검증 완료                                       |
+| Text Splitter   | RecursiveCharacterTextSplitter | chunk_size=512 기준으로 의미 단위를 유지하여 검색 정확도 향상                |
+| Embedding Model | Qwen/Qwen3-Embedding-0.6B      | 한·영·중 다국어를 단일 벡터 공간에서 처리 가능하며 로컬 실행으로 비용 절감 |
+| Vector Store    | Qdrant                         | 메타데이터 필터 기반 문서 분리 검색 지원                                     |
+| Web Search      | Tavily API                     | 최신 시장 동향과 외부 정보 보완에 활용                                       |
+
+### Search Filter Structure
+
+내부 문서는 ingestion 시 메타데이터를 태깅하여 에이전트별로 분리 검색합니다.
+
+| filter_key   | Target Documents          | Agent                 |
+| ------------ | ------------------------- | --------------------- |
+| `research` | 산업·정책 리서치 PDF     | Market Analysis Agent |
+| `lg`       | LG에너지솔루션 ESG 보고서 | LG Analysis Agent     |
+| `catl`     | CATL ESG 보고서           | CATL Analysis Agent   |
+
+### Fallback Strategy
+
+RAG가 빈 결과를 반환할 경우, 에이전트는 자동으로 Web Search 기반 분석으로 전환됩니다.
+이를 통해 벡터 DB 미구성 상황에서도 분석 흐름이 중단되지 않도록 설계하였습니다.
+
+## Agents
+
+- Planner Agent : 전체 Task를 분배하고 Workflow 흐름을 제어
+- Market Analysis Agent : 배터리 산업 및 정책 환경 분석 수행
+- LG Analysis Agent : LG에너지솔루션의 포트폴리오 전략과 핵심 경쟁력 분석
+- CATL Analysis Agent : CATL의 포트폴리오 전략과 핵심 경쟁력 분석
+- Comparison Agent : 두 기업의 전략 비교 및 Comparative SWOT 작성
+- Report Agent : 분석 결과를 종합하여 최종 보고서 형식으로 정리
+
+## Agents
+
+- Query Agent
+  사용자 쿼리를 파싱하고 의도, 대상 기업, 유효성을 판별합니다.
+- Market Analysis Agent
+  산업 동향 분석과 정책 분석을 수행하는 서브그래프 구조의 에이전트입니다.
+- LG Analysis Agent
+  Web Search와 RAG를 활용해 LG에너지솔루션의 전략, SWOT, 재무 정보를 수집하고 구조화합니다.
+- CATL Analysis Agent
+  Web Search와 RAG를 활용해 CATL의 전략, SWOT, 재무 정보를 수집하고 구조화합니다.
+- Report Writer Agent통합된 분석 결과를 바탕으로 최종 Markdown 보고서를 작성합니다.
+- Supervisor Agent
+  전체 파이프라인의 진행 상태를 확인하고 다음 실행 단계를 라우팅합니다.
+
+## Architecture
+
+Supervisor Pattern 기반 Multi-Agent Workflow
+
+##Flow
+Query
+→ Planner Agent
+→ Market Analysis Agent
+→ LG Analysis Agent / CATL Analysis Agent
+→ Comparison Agent
+→ Report Agent
+
+## Directory Structure
+
+```text
+├── data/                  # PDF 문서
+├── agents/                # Agent 모듈
+├── prompts/               # 프롬프트 템플릿
+├── vector_db/             # 벡터 DB 및 임베딩 저장소
+├── outputs/               # 생성된 보고서 저장
+├── main.py                # 실행 스크립트
+└── README.md
 ```
-0. data/ 에 PDF 6개 배치
-1. .env 설정 (API 키)
-2. 의존성 설치
-3. Docker로 Qdrant 실행
-4. PDF Ingestion (벡터 DB 구축)
-5. 에이전트 실행
-```
 
----
-
-## 상세 실행 방법
+## 상세 실행 방법 (Setup)
 
 ### 0. 데이터 준비 (PDF 수동 배치)
 
@@ -114,21 +225,9 @@ report = run_battery_report(
 
 최종 보고서는 `output/battery_report_{session_id}_{timestamp}.md` 에 저장됩니다.
 
----
+## Contributors
 
-## 코드 검토 순서
-
-1. `config.py` — 전역 상수 및 환경 변수
-2. `state.py` — BatteryReportState, ResourceItem 타입 정의
-3. `tool/web_search.py` — 웹 검색 도구 (Tavily)
-4. `tool/rag_retriever.py` — RAG 검색 도구 (Qdrant + Qwen3 임베딩)
-5. `tool/ingest.py` — PDF → 벡터 DB ingestion 스크립트
-6. `memory/memory_manager.py` — 세션 메모리 로드/저장
-7. `prompt/*.py` — 각 에이전트 프롬프트
-8. `agent/query_agent.py` — 쿼리 파싱 노드
-9. `agent/market_agent.py` — 산업 동향 서브 그래프
-10. `agent/lg_agent.py`, `agent/catl_agent.py` — 기업 분석 노드
-11. `agent/report_agent.py` — Aggregator + 보고서 작성 + 품질 검사
-12. `agent/supervisor_agent.py` — Supervisor + 강제 종료 노드
-13. `graph.py` — 전체 그래프 조립
-14. `main.py` — 실행 진입점
+- 김철희 : LangGraph 설계
+- 박소윤 : Vector DB 구축, PDF Parsing
+- 신준용 : Vector DB 구축, PDF Parsing
+- 최유진 : Prompt Engineering, LangGraph 설계
