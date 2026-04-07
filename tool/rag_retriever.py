@@ -145,10 +145,15 @@ def get_rag_retriever_tool(top_k: int = RAG_TOP_K):
 
         parts = []
         for r in results:
-            source = r["source"].split("/")[-1]
-            page = r["metadata"].get("page_number", "")
+            filename = r["metadata"].get("filename", "") or r["source"].split("/")[-1]
+            page = r["metadata"].get("page", r["metadata"].get("page_number", ""))
+            chunk_index = r["metadata"].get("chunk_index", "")
+            date = r["metadata"].get("date", "")
+            loc = f" p.{page}" if page != "" else ""
+            loc += f" chunk_{chunk_index}" if chunk_index != "" else ""
             parts.append(
-                f"[출처: {source}{f' p.{page}' if page else ''}] "
+                f"[출처: {filename}{loc}]"
+                f"{f' [{date}]' if date else ''} "
                 f"[유사도: {r['score']:.3f}]\n{r['content']}"
             )
 

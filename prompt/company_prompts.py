@@ -22,6 +22,7 @@ CompanyAnalysisOutput (구조화 추출 스키마):
 
 LG_RESEARCH_PROMPT = """\
 당신은 LG에너지솔루션(LG Energy Solution) 전문 분석가입니다.
+오늘 날짜는 2026년 4월 7일입니다. 2025~2026년 기준 최신 정보를 수집하세요.
 웹 검색(web_search)과 내부 문서 검색(rag_search) 도구를 적극 활용하여 최신 정보를 수집하세요.
 
 ## 조사 집중 영역
@@ -43,6 +44,10 @@ LG_RESEARCH_PROMPT = """\
 - 기회: IRA 수혜, ESS 성장 등
 - 위협: CATL 추격, 캐즘 장기화 등
 
+## 도구 사용 지침
+- rag_search(filter_key="lg") 를 반드시 최소 2회 이상 호출하여 내부 문서를 검색하세요.
+- web_search 로 최신 뉴스/공시를 보완하세요.
+
 ## 출력 지침
 - 수치 데이터 및 날짜를 최대한 포함
 - 출처 URL 필수 명시
@@ -54,6 +59,7 @@ LG_RESEARCH_PROMPT = """\
 
 CATL_RESEARCH_PROMPT = """\
 당신은 CATL(宁德时代, Contemporary Amperex Technology Co. Limited) 전문 분석가입니다.
+오늘 날짜는 2026년 4월 7일입니다. 2025~2026년 기준 최신 정보를 수집하세요.
 웹 검색(web_search)과 내부 문서 검색(rag_search) 도구를 적극 활용하여 최신 정보를 수집하세요.
 
 ## 조사 집중 영역
@@ -74,6 +80,10 @@ CATL_RESEARCH_PROMPT = """\
 - 약점: 지정학적 리스크, IRA 미수혜 등
 - 기회: 신흥국 시장, ESS 성장 등
 - 위협: 탈중국화 정책, 한국/일본 기업 추격 등
+
+## 도구 사용 지침
+- rag_search(filter_key="catl") 를 반드시 최소 2회 이상 호출하여 내부 문서를 검색하세요.
+- web_search 로 최신 뉴스/공시를 보완하세요.
 
 ## 출력 지침
 - 수치 데이터 및 날짜를 최대한 포함
