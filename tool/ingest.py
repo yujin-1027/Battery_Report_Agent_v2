@@ -79,9 +79,12 @@ def ingest_pdf(
     docs = PyPDFLoader(str(path)).load()
     chunks = splitter.split_documents(docs)
 
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
         chunk.metadata["source_type"] = meta["source_type"]
         chunk.metadata["source_domain"] = str(path)
+        chunk.metadata["filename"] = filename
+        chunk.metadata["date"] = meta.get("date", "")
+        chunk.metadata["chunk_index"] = i
         if "company" in meta:
             chunk.metadata["company"] = meta["company"]
 

@@ -26,11 +26,13 @@ class ResourceItem(TypedDict):
     - raw_content: 원문 전체 텍스트 (step 2에서는 DB 조회 결과)
     - summary    : 500자 이내 요약문
     - source_url : 출처 URL
+    - usage_note : 이 자료가 분석에서 어떤 주장/근거에 사용됐는지 한 줄 설명
     """
     id: str
     raw_content: str
     summary: str
     source_url: str
+    usage_note: str
 
 
 # ── 전체 파이프라인 State ──────────────────────────────────────────────────────
@@ -91,4 +93,5 @@ class BatteryReportState(TypedDict):
     # ── 9. MemoryUpdateNode ───────────────────────────────────────────────────
     final_report:   str        # 최종 확정 보고서
     memory_updated: bool
-    used_sources:   list[str]  # 보고서에 실제 사용된 URL 목록
+    used_sources:   list[str]  # 보고서에 실제 사용된 웹 URL 목록
+    rag_sources:    list[str]  # RAG 내부문서 출처 (파일명+페이지) 목록
