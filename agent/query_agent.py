@@ -45,7 +45,7 @@ class QueryParseResult(BaseModel):
 # ── LLM 초기화 (모듈 로드 시 1회) ────────────────────────────────────────────
 
 _llm    = ChatOpenAI(model=MODEL_NAME, temperature=MODEL_TEMPERATURE)
-_parser = _llm.with_structured_output(QueryParseResult)  # 구조화 출력 바인딩
+_parser = _llm.with_structured_output(QueryParseResult, method="function_calling")  # 구조화 출력 바인딩
 
 
 # ── 노드 함수 ─────────────────────────────────────────────────────────────────

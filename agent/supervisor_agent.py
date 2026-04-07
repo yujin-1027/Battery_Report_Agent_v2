@@ -217,7 +217,7 @@ def supervisor_node(state: dict) -> dict:
         ("human", "다음 단계를 선택하세요. 선택지: {options}"),
     ])
 
-    chain  = prompt | _llm.with_structured_output(RouteResponse)
+    chain  = prompt | _llm.with_structured_output(RouteResponse, method="function_calling")
     result = chain.invoke({"messages": messages, "options": str(ROUTING_OPTIONS)})
 
     print(f"[Supervisor] → {result.next}")

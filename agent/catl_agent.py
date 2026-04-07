@@ -29,12 +29,14 @@ class CompanyAnalysisOutput(BaseModel):
         description="핵심 사업 전략 목록 (각 항목 1~2문장, 최소 5개)"
     )
     swot: dict = Field(
+        default_factory=dict,
         description=(
             "SWOT 분석. 반드시 {'S': str, 'W': str, 'O': str, 'T': str} 형태로. "
             "각 항목은 2~3문장으로 구체적으로 기술."
         )
     )
     financials: dict = Field(
+        default_factory=dict,
         description=(
             "주요 재무 지표. 권장 키: revenue(매출), operating_profit(영업이익), "
             "market_share(시장점유율), order_backlog(수주잔고). "
@@ -42,6 +44,7 @@ class CompanyAnalysisOutput(BaseModel):
         )
     )
     resources: list[dict] = Field(
+        default=[],
         description=(
             "수집된 자료 목록. 각 항목은 "
             "raw_content(원문), summary(500자 이내), source_url(URL) 포함."
@@ -104,7 +107,7 @@ def catl_analysis_node(state: dict) -> dict:
     research_text = research_result["messages"][-1].content
 
     # 구조화 추출
-    extractor = _llm.with_structured_output(CompanyAnalysisOutput)
+    extractor = _llm.with_structured_output(CompanyAnalysisOutput, method="function_calling")
     parsed: CompanyAnalysisOutput = extractor.invoke([
         SystemMessage(content=(
             "아래 CATL 리서치 결과를 구조화하세요.\n"

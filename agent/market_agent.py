@@ -51,6 +51,7 @@ class IndustryAnalysisOutput(BaseModel):
     """산업 분석 LLM 구조화 추출 결과"""
     trends: list[str] = Field(description="주요 배터리 산업 동향 목록 (각 항목 1~2문장)")
     resources: list[dict] = Field(
+        default=[],
         description=(
             "수집된 자료 목록. 각 항목은 "
             "raw_content(원문), summary(500자 이내), source_url(URL) 포함"
@@ -62,6 +63,7 @@ class PolicyAnalysisOutput(BaseModel):
     """정책 분석 LLM 구조화 추출 결과"""
     regulations: list[str] = Field(description="주요 정책·규제 목록 (각 항목 1~2문장)")
     resources: list[dict] = Field(
+        default=[],
         description=(
             "수집된 자료 목록. 각 항목은 "
             "raw_content(원문), summary(500자 이내), source_url(URL) 포함"
@@ -119,7 +121,7 @@ def industry_analysis_node(state: MarketAnalysisState) -> dict:
     research_text = research_result["messages"][-1].content
 
     # 구조화 추출
-    extractor = _llm.with_structured_output(IndustryAnalysisOutput)
+    extractor = _llm.with_structured_output(IndustryAnalysisOutput, method="function_calling")
     parsed: IndustryAnalysisOutput = extractor.invoke([
         SystemMessage(content=(
             "아래 리서치 결과에서 배터리 산업 동향과 자료 목록을 구조화하세요.\n"
@@ -161,7 +163,7 @@ def policy_analysis_node(state: MarketAnalysisState) -> dict:
     })
     research_text = research_result["messages"][-1].content
 
-    extractor = _llm.with_structured_output(PolicyAnalysisOutput)
+    extractor = _llm.with_structured_output(PolicyAnalysisOutput, method="function_calling")
     parsed: PolicyAnalysisOutput = extractor.invoke([
         SystemMessage(content=(
             "아래 리서치 결과에서 배터리 관련 정책·규제 정보와 자료 목록을 구조화하세요.\n"

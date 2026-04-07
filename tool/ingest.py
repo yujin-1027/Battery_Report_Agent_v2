@@ -16,6 +16,7 @@ PDF 메타데이터: 아래 METADATA_TABLE 딕셔너리로 관리.
 
 import argparse
 import time
+import unicodedata
 import uuid
 import torch
 from pathlib import Path
@@ -72,7 +73,7 @@ def ingest_pdf(
     client: QdrantClient,
     splitter: RecursiveCharacterTextSplitter,
 ) -> int:
-    filename = path.name
+    filename = unicodedata.normalize("NFC", path.name)
     meta = METADATA_TABLE[filename]  # run()에서 사전 검증 후 호출됨
 
     docs = PyPDFLoader(str(path)).load()
@@ -122,11 +123,15 @@ def run(reset: bool = False):
         print(f"[ingest] {DATA_DIR} 에 PDF 없음. data/ 폴더에 PDF를 넣고 다시 실행하세요.")
         return
 
+    # macOS NFD 파일명을 NFC로 정규화해서 METADATA_TABLE 키와 비교
+    def nfc(s: str) -> str:
+        return unicodedata.normalize("NFC", s)
+
     # 테이블에 없는 파일 경고
-    unknown = [p.name for p in pdf_files if p.name not in METADATA_TABLE]
+    unknown = [p.name for p in pdf_files if nfc(p.name) not in METADATA_TABLE]
     if unknown:
         print(f"[ingest] WARNING: METADATA_TABLE에 없는 파일 — 건너뜀: {unknown}")
-    pdf_files = [p for p in pdf_files if p.name in METADATA_TABLE]
+    pdf_files = [p for p in pdf_files if nfc(p.name) in METADATA_TABLE]
 
     if not pdf_files:
         print("[ingest] 처리할 PDF 없음. METADATA_TABLE 파일명을 확인하세요.")

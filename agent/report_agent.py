@@ -55,7 +55,7 @@ def aggregator_node(state: dict) -> dict:
     catl_strategy = state.get("catl_strategy", [])
 
     # ─ 확증 편향 검토
-    bias_checker = _llm.with_structured_output(BiasCheckResult)
+    bias_checker = _llm.with_structured_output(BiasCheckResult, method="function_calling")
     bias_result: BiasCheckResult = bias_checker.invoke([
         SystemMessage(content=BIAS_CHECK_PROMPT),
         HumanMessage(content=(
@@ -174,7 +174,7 @@ def quality_checker_node(state: dict) -> dict:
     report_draft  = state.get("report_draft", "")
     current_retry = state.get("retry_count", 0)
 
-    checker = _llm.with_structured_output(QualityResult)
+    checker = _llm.with_structured_output(QualityResult, method="function_calling")
     result: QualityResult = checker.invoke([
         SystemMessage(content=(
             "당신은 배터리 산업 보고서의 품질 평가 전문가입니다.\n"
