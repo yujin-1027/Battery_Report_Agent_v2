@@ -70,6 +70,10 @@ def query_transform_node(state: dict) -> dict:
             "   예) 'LG엔솔' → 'LG에너지솔루션', '닝더스다이' → 'CATL'\n\n"
             "3. is_valid: 배터리·전기차·에너지 저장·ESS·배터리 소재 관련이면 True\n\n"
             "4. invalid_reason: is_valid=False 일 때 사유"
+            "규칙:"
+            "- 배터리 산업, EV, ESS, 관련 에너지 기업과 관련된 쿼리만 허용"
+            "- 쿼리가 모호한 경우, 무효로 표시하기 전에 변형 시도"
+            ""
         )),
         HumanMessage(content=user_query),
     ])
