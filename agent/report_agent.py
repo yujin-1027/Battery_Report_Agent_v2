@@ -177,7 +177,7 @@ def quality_checker_node(state: dict) -> dict:
     checker = _llm.with_structured_output(QualityResult)
     result: QualityResult = checker.invoke([
         SystemMessage(content=(
-            "당신은 배터리 산업 보고서의 품질 평가 전문가입니다.\n"
+            "당신은 B2B 배터리 산업 보고서의 품질 평가 전문가입니다.\n"
             "아래 보고서를 체크리스트 기준으로 엄격하게 평가하세요.\n"
             "passed=True 는 모든 항목이 True 일 때만 가능합니다.\n"
             "미충족 항목은 issues 에 구체적으로 기재하고,\n"
