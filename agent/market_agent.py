@@ -15,12 +15,14 @@
   서브 그래프로 캡슐화하여 메인 그래프에서는 단일 노드처럼 사용 가능.
 """
 
+import json
+import re
 import uuid
 import operator
 from typing import Annotated, Sequence
 from typing_extensions import TypedDict
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
@@ -51,6 +53,7 @@ class IndustryAnalysisOutput(BaseModel):
     """산업 분석 LLM 구조화 추출 결과"""
     trends: list[str] = Field(description="주요 배터리 산업 동향 목록 (각 항목 1~2문장)")
     resources: list[dict] = Field(
+        default=[],
         description=(
             "수집된 자료 목록. 각 항목은 "
             "raw_content(원문), summary(500자 이내), source_url(URL) 포함"
@@ -62,6 +65,7 @@ class PolicyAnalysisOutput(BaseModel):
     """정책 분석 LLM 구조화 추출 결과"""
     regulations: list[str] = Field(description="주요 정책·규제 목록 (각 항목 1~2문장)")
     resources: list[dict] = Field(
+        default=[],
         description=(
             "수집된 자료 목록. 각 항목은 "
             "raw_content(원문), summary(500자 이내), source_url(URL) 포함"
@@ -91,14 +95,80 @@ _policy_agent = create_react_agent(
 
 # ── 헬퍼: ResourceItem 생성 ───────────────────────────────────────────────────
 
-def _make_resource(raw_content: str, summary: str, source_url: str) -> ResourceItem:
+def _make_resource(raw_content: str, summary: str, source_url: str, usage_note: str = "") -> ResourceItem:
     """dict → ResourceItem 변환 (id UUID 자동 생성)"""
     return ResourceItem(
         id=str(uuid.uuid4()),
         raw_content=raw_content,
         summary=summary[:RESOURCE_SUMMARY_MAX_CHARS],
         source_url=source_url,
+        usage_note=usage_note,
     )
+
+
+def _extract_resources_from_messages(messages: list) -> list[ResourceItem]:
+    """
+    ReAct agent 메시지 목록에서 ToolMessage를 파싱해 ResourceItem 리스트 반환.
+    - 웹 검색(Tavily): [{"url": ..., "content": ...}, ...] 형태 JSON
+    - RAG: "[출처: 파일명 p.N] ..." 형태 텍스트
+    """
+    resources: list[ResourceItem] = []
+
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        raw = msg.content if isinstance(msg.content, str) else str(msg.content)
+
+        # 웹 검색 결과: JSON 배열 시도
+        parsed_as_json = False
+        if raw.strip().startswith("["):
+            try:
+                items = json.loads(raw)
+                if isinstance(items, list) and items and isinstance(items[0], dict):
+                    parsed_as_json = True
+                    for item in items:
+                        url     = item.get("url", "")
+                        content = item.get("content", "")
+                        title   = item.get("title", "")
+                        if not url and not content:
+                            continue
+                        resources.append(_make_resource(
+                            raw_content=content,
+                            summary=(title or content)[:RESOURCE_SUMMARY_MAX_CHARS],
+                            source_url=url,
+                        ))
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # RAG 결과: "---" 구분 블록 (JSON 파싱 실패 시 또는 JSON이 아닌 경우)
+        if not parsed_as_json:
+            for block in raw.split("\n\n---\n\n"):
+                block = block.strip()
+                if not block:
+                    continue
+                # "[출처: 파일명 p.N] [유사도: 0.XXX]\n본문..." 형태 파싱
+                source_url = ""
+                score_info = ""
+                lines = block.split("\n", 1)
+                header = lines[0]
+                body   = lines[1].strip() if len(lines) > 1 else block
+
+                m = re.match(r"\[출처: ([^\]]+)\]", header)
+                if m:
+                    source_url = m.group(1)
+                dm = re.search(r"\[(\d{4}-\d{2})\]", header)
+                date_info = f" ({dm.group(1)})" if dm else ""
+                sm = re.search(r"\[유사도: ([^\]]+)\]", header)
+                if sm:
+                    score_info = f" 유사도:{sm.group(1)}"
+
+                resources.append(_make_resource(
+                    raw_content=body,
+                    summary=(body[:RESOURCE_SUMMARY_MAX_CHARS]),
+                    source_url=source_url + date_info + score_info,
+                ))
+
+    return resources
 
 
 # ── 서브 그래프 노드 1: 산업 분석 ────────────────────────────────────────────
@@ -118,25 +188,45 @@ def industry_analysis_node(state: MarketAnalysisState) -> dict:
     })
     research_text = research_result["messages"][-1].content
 
-    # 구조화 추출
-    extractor = _llm.with_structured_output(IndustryAnalysisOutput)
+    # 도구 호출 결과에서 직접 resources 추출 (LLM 요약 텍스트에 출처가 소실되므로)
+    industry_resources = _extract_resources_from_messages(research_result["messages"])
+
+    # trends만 LLM으로 구조화 (resources는 코드에서 처리)
+    extractor = _llm.with_structured_output(IndustryAnalysisOutput, method="function_calling")
     parsed: IndustryAnalysisOutput = extractor.invoke([
         SystemMessage(content=(
-            "아래 리서치 결과에서 배터리 산업 동향과 자료 목록을 구조화하세요.\n"
-            "resource 가 없으면 빈 리스트를 반환하세요.\n"
-            "각 resource 의 summary 는 반드시 500자 이내로 작성하세요."
+            "아래 리서치 결과에서 배터리 산업 동향 목록만 구조화하세요.\n"
+            "resources 필드는 빈 리스트로 반환하세요 (출처는 별도 처리됩니다)."
         )),
         HumanMessage(content=research_text),
     ])
 
-    industry_resources = [
-        _make_resource(
-            raw_content=r.get("raw_content", ""),
-            summary=r.get("summary", ""),
-            source_url=r.get("source_url", ""),
+    # RAG 리소스에 usage_note 부여
+    rag_only = [r for r in industry_resources if not r["source_url"].startswith("http")]
+    if rag_only:
+        chunks_desc = "\n".join(
+            f"[{i}] 출처: {r['source_url']}\n내용: {r['raw_content'][:300]}"
+            for i, r in enumerate(rag_only)
         )
-        for r in parsed.resources
-    ]
+        note_result = _llm.invoke([
+            SystemMessage(content=(
+                "아래는 배터리 산업 동향 분석에 사용된 내부 문서 청크 목록입니다.\n"
+                "각 청크가 분석의 어떤 주장이나 근거를 뒷받침하는 데 쓰였는지 "
+                "한 줄(20자 이내)로 설명하세요.\n"
+                "반드시 '[0] 설명', '[1] 설명' 형식으로, 번호 순서대로 출력하세요."
+            )),
+            HumanMessage(content=(
+                f"리서치 요약:\n{research_text[:1000]}\n\n"
+                f"청크 목록:\n{chunks_desc}"
+            )),
+        ])
+        notes = {}
+        for line in note_result.content.splitlines():
+            m = re.match(r"\[(\d+)\]\s*(.+)", line.strip())
+            if m:
+                notes[int(m.group(1))] = m.group(2).strip()
+        for i, r in enumerate(rag_only):
+            r["usage_note"] = notes.get(i, "")
 
     print(f"[IndustryAnalysis] 동향 {len(parsed.trends)}개, 자료 {len(industry_resources)}건")
     return {
@@ -161,24 +251,44 @@ def policy_analysis_node(state: MarketAnalysisState) -> dict:
     })
     research_text = research_result["messages"][-1].content
 
-    extractor = _llm.with_structured_output(PolicyAnalysisOutput)
+    # 도구 호출 결과에서 직접 resources 추출
+    policy_resources = _extract_resources_from_messages(research_result["messages"])
+
+    extractor = _llm.with_structured_output(PolicyAnalysisOutput, method="function_calling")
     parsed: PolicyAnalysisOutput = extractor.invoke([
         SystemMessage(content=(
-            "아래 리서치 결과에서 배터리 관련 정책·규제 정보와 자료 목록을 구조화하세요.\n"
-            "resource 가 없으면 빈 리스트를 반환하세요.\n"
-            "각 resource 의 summary 는 반드시 500자 이내로 작성하세요."
+            "아래 리서치 결과에서 배터리 관련 정책·규제 목록만 구조화하세요.\n"
+            "resources 필드는 빈 리스트로 반환하세요 (출처는 별도 처리됩니다)."
         )),
         HumanMessage(content=research_text),
     ])
 
-    policy_resources = [
-        _make_resource(
-            raw_content=r.get("raw_content", ""),
-            summary=r.get("summary", ""),
-            source_url=r.get("source_url", ""),
+    # RAG 리소스에 usage_note 부여
+    rag_only = [r for r in policy_resources if not r["source_url"].startswith("http")]
+    if rag_only:
+        chunks_desc = "\n".join(
+            f"[{i}] 출처: {r['source_url']}\n내용: {r['raw_content'][:300]}"
+            for i, r in enumerate(rag_only)
         )
-        for r in parsed.resources
-    ]
+        note_result = _llm.invoke([
+            SystemMessage(content=(
+                "아래는 배터리 관련 정책·규제 분석에 사용된 내부 문서 청크 목록입니다.\n"
+                "각 청크가 분석의 어떤 주장이나 근거를 뒷받침하는 데 쓰였는지 "
+                "한 줄(20자 이내)로 설명하세요.\n"
+                "반드시 '[0] 설명', '[1] 설명' 형식으로, 번호 순서대로 출력하세요."
+            )),
+            HumanMessage(content=(
+                f"리서치 요약:\n{research_text[:1000]}\n\n"
+                f"청크 목록:\n{chunks_desc}"
+            )),
+        ])
+        notes = {}
+        for line in note_result.content.splitlines():
+            m = re.match(r"\[(\d+)\]\s*(.+)", line.strip())
+            if m:
+                notes[int(m.group(1))] = m.group(2).strip()
+        for i, r in enumerate(rag_only):
+            r["usage_note"] = notes.get(i, "")
 
     print(f"[PolicyAnalysis] 정책 {len(parsed.regulations)}개, 자료 {len(policy_resources)}건")
     return {
